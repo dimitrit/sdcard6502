@@ -17,6 +17,7 @@ buffer = $400
 .org $a000
 
 reset:
+  cld
   ldx #$ff
   txs
 ;----------------------------------------------
@@ -57,7 +58,7 @@ read_prompt_input:
   beq load_file
   cmp #'H'
   beq print_help
-  cmp #'E'
+  cmp #'X'
   bne print_prompt
   jsr EXIT
 ;----------------------------------------------
@@ -99,14 +100,17 @@ foundfile:
   ; Open file
   jsr fat32_opendirent
   ; Store file size
-  lda fat32_bytesremaining 
-  sta copy_size
   lda fat32_bytesremaining+1
   sta copy_size+1
-  ; Read file contents into buffer
-  lda #<buffer
+  jsr print_hex
+  lda fat32_bytesremaining
+  sta copy_size
+  jsr print_hex
+  jsr newline
+  ; Read file contents into memory
+  lda copy_destination+1
   sta fat32_address
-  lda #>buffer
+  lda copy_destination
   sta fat32_address+1
   ldx #<reading
   ldy #>reading
@@ -115,15 +119,16 @@ foundfile:
   jsr print_string
   ; Can hang on the file read sometimes
   jsr fat32_file_read
-  ldx #<copying
-  ldy #>copying
-  stx print_pointer
-  sty print_pointer+1
-  jsr print_string
-  ; Start copy
-  jsr start_copy
+;   ldx #<copying
+;   ldy #>copying
+;   stx print_pointer
+;   sty print_pointer+1
+;   jsr print_string
+;   ; Start copy
+;   jsr start_copy
   ; Return to prompt
   jsr print_prompt
+  jsr newline
 ;----------------------------------------------
 ; Read in filename
 ;----------------------------------------------
@@ -255,7 +260,7 @@ stop_copy:
 help_menu:
   .byte "L    Load file"
   .byte $0D, $0A
-  .byte "E    Exit"
+  .byte "X    eXit"
   .byte $0D, $0A
   .asciiz "H    Print help"
 input_filename:
@@ -266,8 +271,8 @@ memory_destination:
   .asciiz "Memory destination > "
 reading:
   .asciiz "Reading data from SD card"
-copying:
-  .asciiz "Copying data to destination"
+; copying:
+;   .asciiz "Copying data to destination"
 ;----------------------------------------------
 ; Includes
 ;----------------------------------------------

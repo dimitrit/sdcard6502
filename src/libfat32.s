@@ -1650,6 +1650,9 @@ fat32_file_read:
 
   ; Read entire sectors to the user-supplied buffer
 _wholesectorreadloop:
+  lda #'.'
+  jsr print_char
+
   ; Read a sector to fat32_address
   jsr fat32_readnextsector
 
