@@ -72,6 +72,20 @@ load_file:
   sty print_pointer+1
   jsr print_string
   jsr read_input
+  ; ----
+  jsr newline
+  lda #'>'
+  jsr print_char
+  ldx #0
+fname:
+  lda input_pointer,x
+  jsr print_char
+  inx
+  cpx #11
+  bne fname
+  lda #'<'
+  jsr print_char
+  ; ----
   ; Find file by name
   ldx #<input_pointer
   ldy #>input_pointer
@@ -102,11 +116,8 @@ foundfile:
   ; Store file size
   lda fat32_bytesremaining+1
   sta copy_size+1
-  jsr print_hex
   lda fat32_bytesremaining
   sta copy_size
-  jsr print_hex
-  jsr newline
   ; Read file contents into memory
   lda copy_destination+1
   sta fat32_address
@@ -117,15 +128,22 @@ foundfile:
   stx print_pointer
   sty print_pointer+1
   jsr print_string
+  jsr binbcd16
+  ldx #2
+num_bytes:
+  lda bcd,x
+  beq skip
+  jsr print_hex
+skip:
+  dex
+  bpl num_bytes
+  ldx #<bytes
+  ldy #>bytes
+  stx print_pointer
+  sty print_pointer+1
+  jsr print_string
   ; Can hang on the file read sometimes
   jsr fat32_file_read
-;   ldx #<copying
-;   ldy #>copying
-;   stx print_pointer
-;   sty print_pointer+1
-;   jsr print_string
-;   ; Start copy
-;   jsr start_copy
   ; Return to prompt
   jsr print_prompt
   jsr newline
@@ -138,35 +156,39 @@ read_prefix_next:
   jsr get_input
   cmp #'.'
   beq period
-  cpx #8
-  beq max_prefix_character
+  and #$5f                   ; make uppercase
   sta input_pointer, x
   inx
-  jmp read_prefix_next
+  cpx #8
+  beq max_prefix_character
+  bne read_prefix_next
 period:
   lda #' '
   sta input_pointer, x
   inx
   cpx #8
   beq max_prefix_character
-  jmp period
+  bne period
 read_suffix_next:
   inx
-max_prefix_character:
-  jsr get_input
   cpx #11
   beq max_suffix_character
-  cmp #$0D                   ; Enter key
+max_prefix_character:
+  jsr get_input
+  cmp #'.'
+  beq max_prefix_character
+  cmp #$0d                   ; Enter key
   beq pad_suffix
+  and #$5f                   ; make uppercase
   sta input_pointer, x
-  jmp read_suffix_next
+  bne read_suffix_next
 pad_suffix:
   lda #' '
   sta input_pointer, x
   cpx #11
   beq max_suffix_character
   inx
-  jmp pad_suffix
+  bne pad_suffix
 max_suffix_character:
   rts
 ;----------------------------------------------
@@ -187,7 +209,7 @@ read_address_next:
   adc copy_destination, x    ; as result, a = x*8 + x*2
   sta copy_destination, x
   jsr get_input              ; read second digit of hex address
-  and #$0F                   ; '0'-'9' -> 0-9
+  and #$0f                   ; '0'-'9' -> 0-9
   adc copy_destination, x
   jsr hex_to_dec
   sta copy_destination, x
@@ -228,32 +250,33 @@ hex_break:
   cld
   rts                        ; return from subroutine
 ;----------------------------------------------
-; Relocate code
+; convert 16 bit binary value to bcd code
 ;----------------------------------------------
-start_copy:
-  lda #<buffer               ; set our source memory address to copy from
-  sta copy_swap
-  lda #>buffer
-  sta copy_swap+1
-  lda copy_destination+1     ; set our destination memory to copy to
-  sta copy_swap+2
-  lda copy_destination
-  sta copy_swap+3
-  ldx #$00                   ; reset x for our loop
-  ldy #$00                   ; reset y for our loop
-copy_loop:
-  lda (copy_swap),y          ; indirect index source memory address
-  sta (copy_swap+2),y        ; indirect index dest memory address
-  iny
-  bne copy_loop              ; loop until our dest goes over 255
-  inc copy_swap+1            ; increment high order source memory address
-  inc copy_swap+3            ; increment high order dest memory address
-  cpx copy_size+1            ; compare with the last address we want to write
-  beq stop_copy
-  inx
-  jmp copy_loop              ; if we're not there yet, loop
-stop_copy:
-  rts
+binbcd16:
+  sed                        ; switch to decimal mode
+  lda #0                     ; clear the result
+  sta bcd+0
+  sta bcd+1
+  sta bcd+2
+  ldx #16		     ; the number of source bits
+
+cnvbit:
+  asl copy_size+0            ; shift out one bit
+  rol copy_size+1
+  lda bcd+0                  ; and add into result
+  adc bcd+0
+  sta bcd+0
+  lda bcd+1                  ; propagating any carry
+  adc bcd+1
+  sta bcd+1
+  lda bcd+2	             ; ... thru whole result
+  adc bcd+2
+  sta bcd+2
+  dex		             ; and repeat for next bit
+  bne cnvbit
+  cld		             ; back to binary
+  rts		             ; all done
+
 ;----------------------------------------------
 ; Strings
 ;----------------------------------------------
@@ -270,7 +293,11 @@ file_not_found:
 memory_destination:
   .asciiz "Memory destination > "
 reading:
-  .asciiz "Reading data from SD card"
+  .asciiz "Reading SD card, "
+bcd:
+  .byte 0,0,0
+bytes:
+  .asciiz " bytes "
 ; copying:
 ;   .asciiz "Copying data to destination"
 ;----------------------------------------------
