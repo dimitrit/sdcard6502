@@ -1,16 +1,16 @@
 ;----------------------------------------------
 ; Copy data from SD card to memory location
 ;----------------------------------------------
-copy_size = $27              ; 2 bytes
+file_size = $27              ; 2 bytes
 copy_destination = $29       ; 2 bytes
 input_pointer = $2B          ; 11 bytes
 print_pointer = $38          ; 2 bytes
 zp_sd_address = $40          ; 2 bytes
 zp_sd_currentsector = $42    ; 4 bytes
 zp_fat32_variables = $46     ; 49 bytes
-copy_swap = $78              ; 4 bytes
-dirent_pointer = $100        ; 2 bytes
-dirent_end_counter = $102    ; 2 bytes
+; copy_swap = $78              ; 4 bytes
+; dirent_pointer = $100        ; 2 bytes
+; dirent_end_counter = $102    ; 2 bytes
 fat32_workspace = $200       ; 2 pages
 buffer = $400
 
@@ -32,10 +32,8 @@ reset:
   jsr print_char
   lda fat32_errorstage
   jsr print_hex
-  jsr EXIT
+  jmp EXIT
 initsuccess:
-  ; Open root directory
-  jsr fat32_openroot
 ;----------------------------------------------
 ; Input prompt
 ;----------------------------------------------
@@ -54,13 +52,54 @@ print_prompt:
   jsr print_char
 read_prompt_input:
   jsr get_input
-  cmp #'L'
-  beq load_file
   cmp #'H'
   beq print_help
+  cmp #'D'
+  beq print_dir
+  cmp #'L'
+  beq load_file
   cmp #'X'
   bne print_prompt
-  jsr EXIT
+  jmp EXIT
+;----------------------------------------------
+; Print Directory
+;----------------------------------------------
+print_dir:
+  jsr fat32_openroot
+next_entry:
+  jsr fat32_readdirent
+  bcs print_prompt	; carry set when done
+  cmp #$20		; is it a 'normal' file?
+  bne next_entry		; no, try next
+  jsr newline
+  ldy #0
+  sty input_pointer
+prt_dirent:
+  ldy input_pointer
+  lda (zp_sd_address),y
+  jsr print_char
+  inc input_pointer
+  lda input_pointer
+  cmp #11
+  beq prt_size
+  cmp #8
+  bne prt_dirent
+  lda #' '
+  jsr print_char
+  bne prt_dirent
+prt_size:
+  lda #' '
+  jsr print_char
+  lda #' '
+  jsr print_char
+  ldy #28
+  lda (zp_sd_address),y
+  sta file_size
+  iny
+  lda (zp_sd_address),y
+  sta file_size+1
+  jsr print_size
+  jmp next_entry
 ;----------------------------------------------
 ; File reading
 ;----------------------------------------------
@@ -73,6 +112,7 @@ load_file:
   jsr print_string
   jsr read_input
   ; ----
+.ifdef DEBUG
   jsr newline
   lda #'>'
   jsr print_char
@@ -85,8 +125,10 @@ fname:
   bne fname
   lda #'<'
   jsr print_char
+.endif
   ; ----
   ; Find file by name
+  jsr fat32_openroot
   ldx #<input_pointer
   ldy #>input_pointer
   jsr fat32_finddirent
@@ -115,9 +157,9 @@ foundfile:
   jsr fat32_opendirent
   ; Store file size
   lda fat32_bytesremaining+1
-  sta copy_size+1
+  sta file_size+1
   lda fat32_bytesremaining
-  sta copy_size
+  sta file_size
   ; Read file contents into memory
   lda copy_destination+1
   sta fat32_address
@@ -128,15 +170,7 @@ foundfile:
   stx print_pointer
   sty print_pointer+1
   jsr print_string
-  jsr binbcd16
-  ldx #2
-num_bytes:
-  lda bcd,x
-  beq skip
-  jsr print_hex
-skip:
-  dex
-  bpl num_bytes
+  jsr print_size
   ldx #<bytes
   ldy #>bytes
   stx print_pointer
@@ -156,7 +190,6 @@ read_prefix_next:
   jsr get_input
   cmp #'.'
   beq period
-  and #$5f                   ; make uppercase
   sta input_pointer, x
   inx
   cpx #8
@@ -218,6 +251,47 @@ read_address_next:
 read_address_done:
   rts
 ;----------------------------------------------
+; Print file size
+;----------------------------------------------
+print_size:
+  lda #0
+  sta input_pointer+1
+  jsr binbcd16
+  ldx #2
+num_bytes:
+  lda bcd,x
+  lsr a
+  lsr a
+  lsr a
+  lsr a
+  jsr check_skip0
+  jsr print_hex
+;  bcc prt_dig
+  lda #0
+  rol		; save carry
+  sta input_pointer+1
+prt_dig:
+  lda bcd,x
+  jsr check_skip0
+  jsr print_hex
+  bcc next_dig
+  lda #1
+  sta input_pointer+1
+next_dig:
+  dex
+  bpl num_bytes
+  rts
+check_skip0:
+  tay
+  clc
+  lda input_pointer+1
+; beq check_done
+;  sec
+;check_done:
+  ror
+  tya
+  rts
+;----------------------------------------------
 ; Print string whos address is in print_pointer
 ;----------------------------------------------
 print_string:
@@ -248,7 +322,7 @@ hex_loop:
   jmp hex_loop               ; branch always
 hex_break:
   cld
-  rts                        ; return from subroutine
+  rts
 ;----------------------------------------------
 ; convert 16 bit binary value to bcd code
 ;----------------------------------------------
@@ -261,8 +335,8 @@ binbcd16:
   ldx #16		     ; the number of source bits
 
 cnvbit:
-  asl copy_size+0            ; shift out one bit
-  rol copy_size+1
+  asl file_size+0            ; shift out one bit
+  rol file_size+1
   lda bcd+0                  ; and add into result
   adc bcd+0
   sta bcd+0
@@ -282,10 +356,12 @@ cnvbit:
 ;----------------------------------------------
 help_menu:
   .byte "L    Load file"
-  .byte $0D, $0A
+  .byte $0d, $0a
+  .byte "D    list Directory"
+  .byte $0d, $0a
   .byte "X    eXit"
-  .byte $0D, $0A
-  .asciiz "H    Print help"
+  .byte $0d, $0a
+  .asciiz "H    Help"
 input_filename:
   .asciiz "Input filename > "
 file_not_found:
@@ -298,8 +374,6 @@ bcd:
   .byte 0,0,0
 bytes:
   .asciiz " bytes "
-; copying:
-;   .asciiz "Copying data to destination"
 ;----------------------------------------------
 ; Includes
 ;----------------------------------------------

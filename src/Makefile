@@ -9,7 +9,7 @@ $(PROGRAM).bin: $(PROGRAM).o
 	ld65 -C kim1-60k.cfg -vm -m $(PROGRAM).map -o $(PROGRAM).bin $(PROGRAM).o
 
 $(PROGRAM).o:	$(PROGRAM).s
-	ca65 -g -l $(PROGRAM).lst $(PROGRAM).s
+	ca65 -DDEBUG -g -l $(PROGRAM).lst $(PROGRAM).s
 
 clean:
 	$(RM) *.o *.lst *.map *.bin *.ptp
