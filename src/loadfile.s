@@ -17,8 +17,7 @@ file_size:		.res 2
 copy_destination:	.res 2
 input_pointer:		.res 11
 print_pointer:		.res 2
-
-;buffer			= $400
+bcd:			.res 3
 
 	.segment "CODE"
 
@@ -376,8 +375,7 @@ memory_destination:
   .asciiz "Memory destination > "
 reading:
   .asciiz "Reading SD card, "
-bcd:
-  .byte 0,0,0
+
 bytes:
   .asciiz " bytes "
 ;----------------------------------------------

@@ -655,6 +655,7 @@ _readendofchain:
   sec
   rts
 
+.ifdef WRITE
 fat32_writenextsector:
   ; Writes the next sector in a cluster chain from the buffer at fat32_address.
   ;
@@ -793,6 +794,7 @@ _fatwrite_fail:
   sta zp_sd_currentsector
   sec
   rts
+.endif
 
 fat32_openroot:
   ; Prepare to read the root directory
@@ -827,6 +829,14 @@ fat32_openroot:
 
   rts
 
+_invalidcluster:
+  ; Treat invalid FAT cluster values as end-of-chain.
+  lda #$FF
+  sta fat32_nextcluster+3
+  sec
+  rts
+
+.ifdef WRITE
 fat32_allocatecluster:
   ; Allocate a cluster to start storing a file at.
 
@@ -855,13 +865,6 @@ fat32_allocatecluster:
   sta (zp_sd_address),y
 
   clc
-  rts
-
-_invalidcluster:
-  ; Treat invalid FAT cluster values as end-of-chain.
-  lda #$FF
-  sta fat32_nextcluster+3
-  sec
   rts
 
 _fat32_allocatecluster_fail:
@@ -1129,6 +1132,7 @@ _sd_full:
   ; Card Full
   sec
   rts
+.endif
 
 fat32_opendirent:
   ; Prepare to read/write a file or directory based on a dirent
@@ -1206,6 +1210,7 @@ _fseek:
 
   rts
 
+.ifdef WRITE
 fat32_writedirent:
   ; Write a directory entry from the open directory
   ; requires:
@@ -1395,6 +1400,7 @@ _nodec:
 
 _writesectorincrementdone:
   rts
+.endif
 
 fat32_readdirent:
   ; Read a directory entry from the open directory
@@ -1485,6 +1491,7 @@ _comparenameloop:
   clc
   rts
 
+.ifdef WRITE
 fat32_markdeleted:
   ; Mark the file as deleted
   ; We need to stash the first character at index 0x0D
@@ -1582,6 +1589,7 @@ _deletefileendofchain:
   ; And we're done!
   clc
   rts
+.endif
 
 fat32_file_readbyte:
   ; Read a byte from an open file
@@ -1688,6 +1696,7 @@ _wholesectorreadloop:
 _fat32_file_read_done:
   rts
 
+.ifdef WRITE
 fat32_file_write:
   ; Write a whole file from memory.  It's assumed the dirent has just been created
   ; and no data has been written yet.
@@ -1750,6 +1759,7 @@ _wholesectorwriteloop:
   ; Done!
 _fat32_file_write_done:
   rts
+.endif
 
 fat32_open_cd:
   ; Prepare to read from the current (last opened) directory.

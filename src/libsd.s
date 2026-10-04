@@ -5,8 +5,11 @@
 ;   zp_sd_currentsector - 4 bytes
 	.exportzp zp_sd_address, zp_sd_currentsector
 
-	.export sd_init, sd_readsector, sd_writesector
+	.export sd_init, sd_readsector
 
+.ifdef WRITE
+	.export sd_writesector
+.endif
 
 	.include "hwconfig.s"
 ; Zero-page scratch accumulator used by SD read paths.
@@ -214,7 +217,6 @@ sd_readbyte:
   lda sd_read_bits
   rts
 
-
 sd_writebyte:
   ; Tick the clock 8 times with descending bits on MOSI
   ; SD communication is mostly half-duplex so we ignore anything it sends back here
@@ -240,7 +242,6 @@ _sendbit:
   bne _wbloop                   ; loop if there are more bits to send
 
   rts
-
 
 sd_waitresult:
   ; Wait for the SD card to return something other than $ff.
@@ -583,6 +584,7 @@ _libsdfail:
   sec
   rts
 
+.ifdef WRITE
 sd_writesector:
   ; Write a sector to the SD card.  A sector is 512 bytes.
   ;
@@ -666,3 +668,4 @@ _writeloop:
   iny
   bne _writeloop
   rts
+.endif
