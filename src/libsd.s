@@ -3,13 +3,28 @@
 ; Requires zero-page variable storage:
 ;   zp_sd_address - 2 bytes
 ;   zp_sd_currentsector - 4 bytes
+	.exportzp zp_sd_address, zp_sd_currentsector
 
+	.export sd_init, sd_readsector, sd_writesector
+
+
+	.include "hwconfig.s"
 ; Zero-page scratch accumulator used by SD read paths.
-sd_read_bits = $AF
+
+	.segment "ZEROPAGE"
+
+sd_read_bits:		.res 1
+zp_sd_address:		.res 2
+zp_sd_currentsector:	.res 4
+
+; sd_read_bits = $AF
 ; Stream-read state for CMD18 multi-block reads.
 sd_stream_active = $04F0
 sd_stream_nextsector = $04F1 ; 4 bytes
 sd_stream_enabled = $04F5
+
+
+	.segment "CODE"
 
 sd_init:
   lda #0

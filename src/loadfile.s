@@ -1,20 +1,26 @@
 ;----------------------------------------------
 ; Copy data from SD card to memory location
 ;----------------------------------------------
-file_size = $27              ; 2 bytes
-copy_destination = $29       ; 2 bytes
-input_pointer = $2B          ; 11 bytes
-print_pointer = $38          ; 2 bytes
-zp_sd_address = $40          ; 2 bytes
-zp_sd_currentsector = $42    ; 4 bytes
-zp_fat32_variables = $46     ; 49 bytes
-; copy_swap = $78              ; 4 bytes
-; dirent_pointer = $100        ; 2 bytes
-; dirent_end_counter = $102    ; 2 bytes
-fat32_workspace = $200       ; 2 pages
-buffer = $400
 
-.org $a000
+	.importzp zp_sd_address, fat32_address, fat32_bytesremaining, fat32_errorstage
+	.import fat32_init, fat32_openroot, fat32_opendirent, fat32_finddirent
+	.import fat32_readdirent, fat32_file_read
+
+	.import sd_init
+
+	.import via_init, newline, print_char, print_hex, get_input, exit
+
+
+	.segment "ZEROPAGE"
+
+file_size:		.res 2
+copy_destination:	.res 2
+input_pointer:		.res 11
+print_pointer:		.res 2
+
+;buffer			= $400
+
+	.segment "CODE"
 
 reset:
   cld
@@ -32,7 +38,7 @@ reset:
   jsr print_char
   lda fat32_errorstage
   jsr print_hex
-  jmp EXIT
+  jmp exit
 initsuccess:
 ;----------------------------------------------
 ; Input prompt
@@ -60,7 +66,7 @@ read_prompt_input:
   beq load_file
   cmp #'X'
   bne print_prompt
-  jmp EXIT
+  jmp exit
 ;----------------------------------------------
 ; Print Directory
 ;----------------------------------------------
@@ -301,7 +307,7 @@ print_string_loop:
   tay
   lda (print_pointer), y     ; get from string
   beq print_string_exit      ; end of string
-  jsr OUTCH                  ; write to output
+  jsr print_char             ; write to output
   inx
   bne print_string_loop      ; do next char
 print_string_exit:
@@ -377,7 +383,6 @@ bytes:
 ;----------------------------------------------
 ; Includes
 ;----------------------------------------------
-  .include "hwconfig.s"
-  .include "libsd.s"
-  .include "libfat32.s"
-  .include "libio.s"
+;   .include "libsd.s"
+;   .include "libfat32.s"
+;   .include "libio.s"

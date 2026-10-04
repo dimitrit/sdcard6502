@@ -5,6 +5,22 @@
 ; fat32_workspace    - a large page-aligned 512-byte workspace
 ; zp_fat32_variables - 52 bytes of zero-page storage for variables etc
 
+	.importzp zp_sd_address, zp_sd_currentsector
+
+	.import sd_readsector, sd_writesector
+
+	.import print_char
+
+	.exportzp fat32_address, fat32_bytesremaining, fat32_errorstage
+	.export fat32_init, fat32_openroot, fat32_opendirent, fat32_finddirent
+	.export fat32_readdirent, fat32_file_read
+
+	.segment "ZEROPAGE"
+
+zp_fat32_variables:	.res 52
+
+fat32_workspace		= $200       ; 2 pages
+
 fat32_readbuffer = fat32_workspace
 ; Scratch RAM for contiguous-cluster run expansion during sequential reads.
 fat32_runcluster                = $05F6 ; 4 bytes
@@ -28,6 +44,9 @@ fat32_cdcluster                 = zp_fat32_variables + $2f  ; 4 bytes
 
 fat32_errorstage                = fat32_bytesremaining  ; only used during initialization
 
+_FSTYPE_FAT32 = 12
+
+	.segment "CODE"
 fat32_init:
   ; Initialize the module - read the MBR etc, find the partition,
   ; and set up the variables ready for navigating the filesystem
@@ -70,7 +89,6 @@ fat32_init:
   inc fat32_errorstage ; stage 2 = finding partition
 
   ; Find a FAT32 LBA partition, type 12 (0xc)
-_FSTYPE_FAT32 = 12
   ldx #0
   lda fat32_readbuffer+$1c2,x
   cmp #_FSTYPE_FAT32
