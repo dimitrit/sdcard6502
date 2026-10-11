@@ -11,7 +11,7 @@ $(PROGRAM).bin: $(PROGRAM).o $(LIBS)
 	ld65 -S 0xA000 -C kim1-60k.cfg -vm -m $(PROGRAM).map -Ln $(PROGRAM).lbl -o $(PROGRAM).bin $(PROGRAM).o $(LIBS)
 
 %.o: %.s
-	ca65 -DDEBUG -g -l $(basename $<).lst $<
+	ca65 -g -l $(basename $<).lst $<
 
 clean:
 	$(RM) *.o *.lst *.map *.bin *.ptp

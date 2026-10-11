@@ -1,3 +1,5 @@
+BS = $08                        ; backspace
+
 PORTA = $1700
 DDRA = $1701
 PORTB = $1702

@@ -15,9 +15,12 @@
 
 file_size:		.res 2
 copy_destination:	.res 2
-input_pointer:		.res 11
+file_name:		.res 11
+input_buffer:   .res 16
 print_pointer:		.res 2
 bcd:			.res 3
+tmp1:			.res 1
+tmp2:			.res 1
 
 	.segment "CODE"
 
@@ -76,15 +79,21 @@ next_entry:
   bcs print_prompt	; carry set when done
   cmp #$20		; is it a 'normal' file?
   bne next_entry		; no, try next
+  ldy #30
+  lda (zp_sd_address),y		; is filesize > 64kb
+  bne next_entry		; yes, skip
+  iny
+  lda (zp_sd_address),y
+  bne next_entry
   jsr newline
   ldy #0
-  sty input_pointer
+  sty tmp1
 prt_dirent:
-  ldy input_pointer
+  ldy tmp1
   lda (zp_sd_address),y
   jsr print_char
-  inc input_pointer
-  lda input_pointer
+  inc tmp1
+  lda tmp1
   cmp #11
   beq prt_size
   cmp #8
@@ -99,10 +108,10 @@ prt_size:
   jsr print_char
   ldy #28
   lda (zp_sd_address),y
-  sta file_size
+  sta tmp1
   iny
   lda (zp_sd_address),y
-  sta file_size+1
+  sta tmp2
   jsr print_size
   jmp next_entry
 ;----------------------------------------------
@@ -123,7 +132,7 @@ load_file:
   jsr print_char
   ldx #0
 fname:
-  lda input_pointer,x
+  lda file_name,x
   jsr print_char
   inx
   cpx #11
@@ -134,8 +143,8 @@ fname:
   ; ----
   ; Find file by name
   jsr fat32_openroot
-  ldx #<input_pointer
-  ldy #>input_pointer
+  ldx #<file_name
+  ldy #>file_name
   jsr fat32_finddirent
   bcc foundfile
   ; File not found
@@ -162,9 +171,9 @@ foundfile:
   jsr fat32_opendirent
   ; Store file size
   lda fat32_bytesremaining+1
-  sta file_size+1
+  sta tmp2
   lda fat32_bytesremaining
-  sta file_size
+  sta tmp1
   ; Read file contents into memory
   lda copy_destination+1
   sta fat32_address
@@ -191,44 +200,52 @@ foundfile:
 ;----------------------------------------------
 read_input:
   ldx #0
-read_prefix_next:
+read_next:
   jsr get_input
-  cmp #'.'
-  beq period
-  sta input_pointer, x
+  cmp #$0a
+  beq input_done
+  cmp #$0d
+  beq input_done
+  cmp #8
+  bne store_char
+  cpx #0
+  bcc read_next
+  dex
+  bpl read_next
+store_char:
+  sta input_buffer, x
+  cpx #$0f
+  bcs read_next
   inx
-  cpx #8
-  beq max_prefix_character
-  bne read_prefix_next
-period:
+  bne read_next
+input_done:
+  stx tmp1
+  cpx #0
+  bne copy_fname
+  jmp print_prompt
+copy_fname:
+  ldy #0
+  ldx #10
   lda #' '
-  sta input_pointer, x
+clear_fname:
+  sta file_name,x
+  dex
+  bpl clear_fname
   inx
-  cpx #8
-  beq max_prefix_character
-  bne period
-read_suffix_next:
-  inx
-  cpx #11
-  beq max_suffix_character
-max_prefix_character:
-  jsr get_input
+copy_char:
+  lda input_buffer,x
   cmp #'.'
-  beq max_prefix_character
-  cmp #$0d                   ; Enter key
-  beq pad_suffix
-  and #$5f                   ; make uppercase
-  sta input_pointer, x
-  bne read_suffix_next
-pad_suffix:
-  lda #' '
-  sta input_pointer, x
-  cpx #11
-  beq max_suffix_character
+  beq is_dot
+  sta file_name,y
+  iny
   inx
-  bne pad_suffix
-max_suffix_character:
+  cpx tmp1
+  bne copy_char
   rts
+is_dot:
+  ldy #8
+  inx
+  bne copy_char
 ;----------------------------------------------
 ; Read in address to copy data to
 ;----------------------------------------------
@@ -260,7 +277,7 @@ read_address_done:
 ;----------------------------------------------
 print_size:
   lda #0
-  sta input_pointer+1
+  sta file_name+1
   jsr binbcd16
   ldx #2
 num_bytes:
@@ -274,14 +291,14 @@ num_bytes:
 ;  bcc prt_dig
   lda #0
   rol		; save carry
-  sta input_pointer+1
+  sta file_name+1
 prt_dig:
   lda bcd,x
   jsr check_skip0
   jsr print_hex
   bcc next_dig
   lda #1
-  sta input_pointer+1
+  sta file_name+1
 next_dig:
   dex
   bpl num_bytes
@@ -289,7 +306,7 @@ next_dig:
 check_skip0:
   tay
   clc
-  lda input_pointer+1
+  lda file_name+1
 ; beq check_done
 ;  sec
 ;check_done:
@@ -312,7 +329,7 @@ print_string_loop:
 print_string_exit:
   rts
 ;----------------------------------------------
-; Hex to decimal converter
+; Convert hex string to decimal
 ;----------------------------------------------
 hex_to_dec:
   sed                        ; switch to decimal mode
@@ -329,7 +346,7 @@ hex_break:
   cld
   rts
 ;----------------------------------------------
-; convert 16 bit binary value to bcd code
+; Convert 16 bit binary value to bcd code
 ;----------------------------------------------
 binbcd16:
   sed                        ; switch to decimal mode
@@ -340,8 +357,8 @@ binbcd16:
   ldx #16		     ; the number of source bits
 
 cnvbit:
-  asl file_size+0            ; shift out one bit
-  rol file_size+1
+  asl tmp1             	     ; shift out one bit
+  rol tmp2
   lda bcd+0                  ; and add into result
   adc bcd+0
   sta bcd+0
@@ -375,12 +392,5 @@ memory_destination:
   .asciiz "Memory destination > "
 reading:
   .asciiz "Reading SD card, "
-
 bytes:
   .asciiz " bytes "
-;----------------------------------------------
-; Includes
-;----------------------------------------------
-;   .include "libsd.s"
-;   .include "libfat32.s"
-;   .include "libio.s"

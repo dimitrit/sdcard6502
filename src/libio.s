@@ -29,12 +29,7 @@ prt_hex:
 .proc get_input
 ; JSR GETCH    1E5A     Put character     -     A       X preserved
 ;                       from TTY in A                   Y = FF
-  jsr GETCH
-;  cmp #$60
-;  bcs done
-;  and #$5f	; make uppercase
-done:
-  rts
+  jmp GETCH
 .endproc
 
 .proc exit
